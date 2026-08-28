@@ -26,7 +26,9 @@ class Aria2 {
     return this.#ready;
   }
   #secret = crypto.randomUUID();
-  #port = 6801;
+  // Use a random port to avoid conflicting with leftover aria2c processes
+  // from previous bootstraps that may still hold the default 6801 port
+  #port = 6800 + Math.floor(Math.random() * 1000);
   #ws?: WebSocket;
   #command?: Command;
   #child?: Child;
