@@ -111,14 +111,44 @@ pub async fn network_fetch(
 
 #[tauri::command]
 pub async fn network_get_system_proxy_url() -> Result<HashMap<String, String>, ()> {
-  let proxies = reqwest::get_system_proxy_map();
-  let mut mapped_proxies: HashMap<String, String> = HashMap::with_capacity(proxies.len());
+  use winreg::enums::HKEY_CURRENT_USER;
+  use winreg::RegKey;
 
-  for (key, value) in proxies {
-    mapped_proxies.insert(key.clone(), match value {
-      reqwest::ProxyScheme::Http { host, .. } => host.to_string(),
-      reqwest::ProxyScheme::Https { host, .. } => host.to_string(),
-    });
+  let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+  let key = hkcu
+    .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+    .map_err(|_| ())?;
+
+  let proxy_enable: u32 = key.get_value("ProxyEnable").unwrap_or(0);
+  if proxy_enable == 0 {
+    return Ok(HashMap::new());
+  }
+
+  let proxy_server: String = key.get_value("ProxyServer").unwrap_or_default();
+  let mut mapped_proxies: HashMap<String, String> = HashMap::new();
+
+  let normalize = |host: &str| -> String {
+    host
+      .trim()
+      .trim_start_matches("http://")
+      .trim_start_matches("https://")
+      .to_string()
+  };
+
+  // Registry format is either "host:port" or "http=host1:port1;https=host2:port2"
+  if proxy_server.contains('=') {
+    for part in proxy_server.split(';') {
+      if let Some((scheme, host)) = part.split_once('=') {
+        let scheme = scheme.trim().to_ascii_lowercase();
+        if scheme == "http" || scheme == "https" {
+          mapped_proxies.insert(scheme, normalize(host));
+        }
+      }
+    }
+  } else {
+    let host = normalize(&proxy_server);
+    mapped_proxies.insert("http".to_string(), host.clone());
+    mapped_proxies.insert("https".to_string(), host);
   }
 
   Ok(mapped_proxies)
