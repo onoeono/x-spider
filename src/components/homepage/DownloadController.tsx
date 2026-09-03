@@ -1,10 +1,10 @@
 /* eslint-disable react/prop-types */
-import { App, Button, Checkbox, DatePicker, Form, Radio, Space } from 'antd';
-import dayjs from 'dayjs';
-import React from 'react';
-import MediaType from '../../enums/MediaType';
-import { DownloadFilter } from '../../interfaces/DownloadFilter';
+import { App, Button, Checkbox, Space, Tooltip } from 'antd';
+import { StarFilled, StarOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import { DownloadFilterForm } from '../DownloadFilterForm';
 import { useDownloadStore } from '../../stores/download';
+import { useFavoritesStore } from '../../stores/favorites';
 import { useHomepageStore } from '../../stores/homepage';
 
 export const DownloadController: React.FC = () => {
@@ -17,6 +17,29 @@ export const DownloadController: React.FC = () => {
   const { createCreationTask } = useDownloadStore((s) => ({
     createCreationTask: s.createCreationTask,
   }));
+  const { users, addFavorite, removeFavorite } = useFavoritesStore((s) => ({
+    users: s.users,
+    addFavorite: s.addFavorite,
+    removeFavorite: s.removeFavorite,
+  }));
+  const favorited = user ? users.some((fav) => fav.id === user.id) : false;
+  // 本地状态：搜索新用户时（userInfo.data 清空 → 本组件卸载重挂）自动重置为默认勾选
+  const [autoFavoriteOnDownload, setAutoFavoriteOnDownload] = useState(true);
+
+  const onToggleFavorite = () => {
+    if (!user) {
+      message.error('请先加载用户');
+      return;
+    }
+
+    if (favorited) {
+      removeFavorite(user.id);
+      message.success('已取消收藏');
+    } else {
+      addFavorite(user);
+      message.success('已加入收藏，可到左侧「收藏」页批量同步');
+    }
+  };
 
   const onStartDownload = async () => {
     if (!user) {
@@ -31,6 +54,9 @@ export const DownloadController: React.FC = () => {
 
     try {
       createCreationTask(user, filter);
+      if (autoFavoriteOnDownload) {
+        addFavorite(user);
+      }
       message.success('已成功创建下载任务，请到下载管理页查看');
     } catch (err: any) {
       log.error(err);
@@ -41,88 +67,35 @@ export const DownloadController: React.FC = () => {
   return (
     <section className="p-4 bg-white rounded-md mt-3 border-[1px]">
       <h2 className="font-bold mb-4">下载配置</h2>
-      <Form<DownloadFilter>
-        layout="inline"
-        initialValues={filter}
-        onValuesChange={(_, values) => {
-          setFilter(values);
-        }}
-      >
-        <Form.Item name="dateRange" label="日期范围">
-          <DatePicker.RangePicker
-            presets={[
-              {
-                label: '至今',
-                value: [dayjs.unix(0), dayjs()],
-              },
-              {
-                label: '最近 7 天',
-                value: [dayjs().subtract(7, 'day'), dayjs()],
-              },
-              {
-                label: '最近 15 天',
-                value: [dayjs().subtract(15, 'day'), dayjs()],
-              },
-              {
-                label: '最近 1 个月',
-                value: [dayjs().subtract(1, 'month'), dayjs()],
-              },
-              {
-                label: '最近 6 个月',
-                value: [dayjs().subtract(6, 'month'), dayjs()],
-              },
-              {
-                label: '最近 1 年',
-                value: [dayjs().subtract(1, 'year'), dayjs()],
-              },
-            ]}
-            disabledDate={(cur) => cur && cur > dayjs().endOf('day')}
-          />
-        </Form.Item>
-        <Form.Item name="mediaTypes" label="媒体类型">
-          <Checkbox.Group
-            options={[
-              {
-                label: '视频',
-                value: MediaType.Video,
-              },
-              {
-                label: '照片',
-                value: MediaType.Photo,
-              },
-              {
-                label: 'GIF',
-                value: MediaType.Gif,
-              },
-            ]}
-          />
-        </Form.Item>
-        <Form.Item
-          name="source"
-          label="下载源"
-          tooltip="帖子能下载到更早的推文，但爬取速度较慢；媒体可能下载不到更早的推文，但爬取速度更快。"
-        >
-          <Radio.Group
-            options={[
-              {
-                label: '帖子',
-                value: 'tweets',
-              },
-              {
-                label: '媒体',
-                value: 'medias',
-              },
-            ]}
-          />
-        </Form.Item>
-      </Form>
+      <DownloadFilterForm value={filter} onChange={setFilter} />
       <hr className="my-4" />
-      <section className="flex space-x-2">
+      <section className="flex items-center space-x-2">
         <Button type="primary" onClick={onStartDownload}>
           <Space>
             <span>开始下载</span>
           </Space>
         </Button>
+        {favorited ? (
+          <Button icon={<StarFilled />} danger onClick={onToggleFavorite}>
+            <Space>
+              <span>取消收藏</span>
+            </Space>
+          </Button>
+        ) : (
+          <Button icon={<StarOutlined />} onClick={onToggleFavorite}>
+            <Space>
+              <span>加入收藏</span>
+            </Space>
+          </Button>
+        )}
+        <Checkbox
+          checked={autoFavoriteOnDownload}
+          onChange={(e) => setAutoFavoriteOnDownload(e.target.checked)}
+        >
+          <Tooltip title="勾选后，点击「开始下载」会自动将该用户加入收藏">
+            <span>收藏</span>
+          </Tooltip>
+        </Checkbox>
       </section>
     </section>
   );
