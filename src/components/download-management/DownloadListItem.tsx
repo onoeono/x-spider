@@ -24,6 +24,18 @@ export interface DownloadListItemProps {
   itemGap: number;
 }
 
+const SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
+
+/** 把字节数转成可读大小；aria2 还没拿到 Content-Length 时为 0 或 Infinity */
+function formatSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    SIZE_UNITS.length - 1,
+  );
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${SIZE_UNITS[i]}`;
+}
+
 export const DownloadListItem: React.FC<DownloadListItemProps> = ({
   task: t,
   itemClientHeight,
@@ -128,6 +140,8 @@ export const DownloadListItem: React.FC<DownloadListItemProps> = ({
     icon: <FolderFilled />,
   };
 
+  const sizeText = formatSize(t.totalSize);
+
   return (
     <div
       role="listitem"
@@ -201,8 +215,14 @@ export const DownloadListItem: React.FC<DownloadListItemProps> = ({
             className="mb-0 mr-0"
           />
         </div>
-        <div>
+        <div className="flex items-center justify-between gap-2">
           <StatusText task={t} />
+          <span
+            className="text-sm text-ant-color-text-secondary shrink-0"
+            title={sizeText === '—' ? '大小未知（尚未获取到）' : '媒体大小'}
+          >
+            {sizeText}
+          </span>
         </div>
       </div>
     </div>
