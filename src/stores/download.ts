@@ -11,7 +11,7 @@ import { TwitterUser } from '../interfaces/TwitterUser';
 import { AriaStatus, aria2 } from '../utils/aria2';
 import { getUserMedias, getUserTweets } from '../twitter/api';
 import { useSettingsStore } from './settings';
-import { getDownloadUrl } from '../twitter/utils';
+import { disableLosslessImage, getDownloadUrl } from '../twitter/utils';
 import { resolveVariables } from '../utils/file-name-template';
 import { FileNameTemplateData } from '../interfaces/FileNameTemplateData';
 import dayjs from 'dayjs';
@@ -304,6 +304,12 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
     if (status.status === 'error') {
       if (task.ariaRetryCountRemains > 0) {
+        // 3=资源不存在 22=HTTP 响应头异常 23=重定向过多 24=鉴权失败，
+        // 这几类错误说明图片的 png 通道不可用，退回 jpg 通道兜底，保证仍能下载成功
+        if ([3, 22, 23, 24].includes(status.errorCode)) {
+          log().warn('Image png channel unavailable, fallback to jpg');
+          disableLosslessImage();
+        }
         log().warn(
           `Task download failed, retry it. RetryCountRemains: ${task.ariaRetryCountRemains}`,
           task,
@@ -316,14 +322,14 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         });
         newTask.ariaRetryCountRemains = task.ariaRetryCountRemains - 1;
 
-        const gid = await aria2.invoke('aria2.addUri', [task.downloadUrl], {
+        const gid = await aria2.invoke('aria2.addUri', [newTask.downloadUrl], {
           dir: newTask.dir,
           out: newTask.fileName,
         });
         newTask.gid = gid;
 
-        const status = await aria2.tellStatus(task.gid);
-        newTask.status = status.status;
+        const newStatus = await aria2.tellStatus(newTask.gid);
+        newTask.status = newStatus.status;
 
         set({
           downloadTasks: get().downloadTasks.concat(newTask),
